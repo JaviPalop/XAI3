@@ -1,0 +1,189 @@
+---
+title: "XAI3"
+author: "Francisco Javier Palop Medina"
+date: "2024-05-23"
+output: html_document
+---
+
+```{r}
+library(randomForest)
+library(pdp)
+library(ggplot2)
+library(dplyr)
+
+df_bikes <- read.csv("C:/Users/34659/Documents/Universidad/Tercero/EDM/Practica_5/day.csv")
+
+## one-hot encoding of the attribute season
+df_bikes$spring <- ifelse(df_bikes$season == 2, 1, 0)
+df_bikes$summer <- ifelse(df_bikes$season == 3, 1, 0)
+df_bikes$fall <- ifelse(df_bikes$season == 4, 1, 0)
+# Create feature MISTY
+df_bikes$MISTY <- ifelse(df_bikes$weathersit == 2, 1, 0)
+
+# Create feature RAIN
+df_bikes$RAIN <- ifelse(df_bikes$weathersit %in% c(3, 4), 1, 0)
+
+# Now we denormalize temp, hum and windspreed features
+
+df_bikes$temp <- df_bikes$temp * (39 + 8) - 8
+
+df_bikes$hum <- df_bikes$hum * 100
+
+df_bikes$windspeed <- df_bikes$windspeed * 67
+
+df_bikes$days_since_2011 <- as.numeric(difftime(as.Date(df_bikes$dteday), as.Date("2011-01-01"), units = "days"))
+
+df_selected <- df_bikes[, c("spring", "summer", "fall", "MISTY", "RAIN", "temp", "hum", "windspeed", "days_since_2011", "workingday", "holiday", "cnt")]
+
+```
+
+Random Forest
+```{r}
+# Fit a random forest model
+set.seed(123)  # For reproducibility
+rf_model <- randomForest(cnt ~ ., data = df_selected, importance = TRUE)
+
+# View the importance of variables
+importance(rf_model)
+```
+
+
+PDP
+```{r}
+# Partial dependence plot for days_since_2011
+pdp_days <- partial(rf_model, pred.var = "days_since_2011", plot = FALSE)
+#pdp_days_df <- as.data.frame(pdp_days)
+
+# Partial dependence plot for temperature
+pdp_temp <- partial(rf_model, pred.var = "temp", plot = FALSE)
+#pdp_temp_df <- as.data.frame(pdp_temp)
+
+# Partial dependence plot for humidity
+pdp_hum <- partial(rf_model, pred.var = "hum", plot = FALSE)
+#pdp_hum_df <- as.data.frame(pdp_hum)
+
+# Partial dependence plot for windspeed
+pdp_windspeed <- partial(rf_model, pred.var = "windspeed", plot = FALSE)
+#pdp_wind_df <- as.data.frame(pdp_wind)
+
+
+# Using ggplot2 for better visualization
+# Función para agregar densidad en la parte inferior del gráfico
+add_density <- function(pdp_data, original_data, variable, xlab, ylab) {
+  ggplot() +
+    geom_line(data = pdp_data, aes_string(x = variable, y = "yhat"), color = 'black') +
+    geom_rug(data = original_data, aes_string(x = variable), sides = "b", alpha = 0.5) +
+    ggtitle(paste("Partial Dependence Plot for", xlab)) +
+    ylab(ylab) +
+    xlab(xlab)
+}
+
+
+plot_temp <- add_density(pdp_temp, df_selected, "temp", "Temperature (°C)", "Partial Dependence")
+plot_days <- add_density(pdp_days, df_selected, "days_since_2011", "Days Since 2011", "Partial Dependence")
+plot_hum <- add_density(pdp_hum, df_selected, "hum", "Humidity (%)", "Partial Dependence")
+plot_windspeed <- add_density(pdp_windspeed, df_selected, "windspeed", "Wind Speed (km/h)", "Partial Dependence")
+
+
+```
+
+```{r}
+plot_temp
+plot_days
+plot_hum
+plot_windspeed
+```
+
+
+EXERCISE 2
+
+
+```{r}
+# Carga las bibliotecas necesarias
+library(ggplot2)
+library(ggExtra)
+
+# Muestreo de un subconjunto de datos
+set.seed(123)
+sample_data <- df_selected %>% sample_frac(0.1)
+
+# Generación de datos de dependencia parcial en 2D
+pdp_2d <- partial(rf_model, pred.var = c("temp", "hum"), grid.resolution = 50, train = sample_data)
+pdp_2d_df <- as.data.frame(pdp_2d)
+
+# Gráfico de Dependencia Parcial en 2D con geom_point() y geom_rug()
+p <- ggplot(pdp_2d_df, aes(x = temp, y = hum)) +
+  geom_point(aes(color = yhat), size = 1) +  # Añade una capa geom_point()
+  geom_rug(data = df_selected, aes(x = temp), sides = "b", alpha = 0.5) +  # Añade rugosidad en el eje X superior
+  geom_rug(data = df_selected, aes(y = hum), sides = "l", alpha = 0.5) +  # Añade rugosidad en el eje Y derecho
+  scale_color_viridis_c() +
+  labs(title = "Gráfico de Dependencia Parcial en 2D: Temperatura y Humedad",
+       x = "Temperatura (°C)", y = "Humedad (%)", color = "Cuentas de Bicicletas Predichas") +
+  theme_minimal()
+
+# Mostrar el gráfico
+print(p)
+
+```
+
+
+
+EXERCISE 3
+
+```{r}
+house <- read.csv("C:/Users/34659/Documents/Universidad/Tercero/EDM/Practica_5/kc_house_data.csv")
+
+# Drop unnecessary columns
+house <- house %>% select(price, bedrooms, bathrooms, sqft_living, sqft_lot, floors, yr_built)
+
+# Sample a subset of data
+set.seed(123)
+sample_house <- house %>% sample_frac(0.1)
+
+```
+
+Random Forest
+```{r}
+# Fit a random forest model
+set.seed(123)  # For reproducibility
+rf_model_house <- randomForest(price ~ ., data = sample_house, importance = TRUE)
+
+# View the importance of variables
+importance(rf_model_house)
+
+```
+
+PDP
+```{r}
+# Partial dependence plot for bedrooms
+pdp_bedrooms <- partial(rf_model_house, pred.var = "bedrooms", plot = FALSE)
+#pdp_bedrooms_df <- as.data.frame(pdp_bedrooms)
+
+# Partial dependence plot for bathrooms
+pdp_bathrooms <- partial(rf_model_house, pred.var = "bathrooms", plot = FALSE)
+#pdp_bathrooms_df <- as.data.frame(pdp_bathrooms)
+
+# Partial dependence plot for sqft_living
+pdp_sqft_living <- partial(rf_model_house, pred.var = "sqft_living", plot = FALSE)
+#pdp_sqft_living_df <- as.data.frame(pdp_sqft_living)
+
+# Partial dependence plot for floors
+pdp_floors <- partial(rf_model_house, pred.var = "floors", plot = FALSE)
+#pdp_floors_df <- as.data.frame(pdp_floors)
+
+
+plot_bed <- add_density(pdp_bedrooms, sample_house, "bedrooms", "Bedrooms", "Predicted Price")
+plot_bath <- add_density(pdp_bathrooms, sample_house, "bathrooms", "Bathrooms", "Predicted Price")
+plot_sqft <- add_density(pdp_sqft_living, sample_house, "sqft_living", "Sqft Living", "Predicted Price")
+plot_floor <- add_density(pdp_floors, sample_house, "floors", "Floors", "Predicted Price")
+
+```
+
+```{r}
+
+plot_bed
+plot_bath
+plot_sqft
+plot_floor
+```
+
