@@ -1,2 +1,2 @@
 # XAI3
-Example of model-agnostic methods (PDP)
+Example of model-agnostic methods (PDP) in R
